@@ -1,76 +1,41 @@
 import streamlit as st
 import yt_dlp
-import os
-import tempfile
+import urllib.parse
 
-# Configuração do logger
-import logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-@st.cache_data
-def get_video_info(url):
-    ydl_opts = {'quiet': True}
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        try:
-            info = ydl.extract_info(url, download=False)
-            return info
-        except Exception as e:
-            logger.error(f"Erro ao obter informações do vídeo: {str(e)}")
-            return None
-
-def download_youtube_video(url, max_height=1080):
+def get_direct_url(youtube_url, max_height=1080):
+    ydl_opts = {
+        'format': f'bestvideo[ext=mp4][height<={max_height}]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+        'quiet': True,
+    }
+    
     try:
-        info = get_video_info(url)
-        if not info:
-            return False, None, "", "Não foi possível obter informações do vídeo."
-
-        # Verifica o tamanho do vídeo
-        file_size = info.get('filesize')
-        if file_size and file_size > 200 * 1024 * 1024:  # 200 MB limit
-            return False, None, "", "O vídeo é muito grande para download direto (limite de 200 MB)."
-
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as temp_file:
-            ydl_opts = {
-                'format': f'bestvideo[ext=mp4][height<={max_height}]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-                'outtmpl': temp_file.name,
-            }
-            
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([url])
-            
-            temp_file.seek(0)
-            file_data = temp_file.read()
-            file_name = f"{info['title']}.mp4"
-            
-            return True, file_data, file_name, ""
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(youtube_url, download=False)
+            if 'url' in info:
+                return True, info['url'], info.get('title', 'video') + '.mp4', ""
+            else:
+                return False, "", "", "Não foi possível obter o link direto do vídeo."
     except Exception as e:
-        logger.error(f"Erro durante o download: {str(e)}")
-        return False, None, "", f"Erro durante o download: {str(e)}"
+        return False, "", "", f"Erro ao processar o vídeo: {str(e)}"
 
 st.title('YouTube Video Downloader')
 
 url = st.text_input('Insira o link do vídeo do YouTube:')
 max_resolution = st.selectbox('Selecione a resolução máxima:', [1080, 720, 480, 360])
 
-if st.button('Preparar Download'):
+if st.button('Gerar Link de Download'):
     if url:
-        with st.spinner('Preparando o vídeo para download...'):
-            success, file_data, file_name, error_message = download_youtube_video(url, max_resolution)
+        with st.spinner('Gerando link de download...'):
+            success, direct_url, file_name, error_message = get_direct_url(url, max_resolution)
             
             if success:
-                st.success('Vídeo pronto para download!')
-                try:
-                    st.download_button(
-                        label="Baixar Vídeo",
-                        data=file_data,
-                        file_name=file_name,
-                        mime="video/mp4"
-                    )
-                except Exception as e:
-                    logger.error(f"Erro ao preparar o botão de download: {str(e)}")
-                    st.error(f"Erro ao preparar o download: {str(e)}")
+                st.success('Link de download gerado com sucesso!')
+                encoded_filename = urllib.parse.quote(file_name)
+                download_link = f'<a href="{direct_url}" download="{encoded_filename}">Clique aqui para baixar o vídeo</a>'
+                st.markdown(download_link, unsafe_allow_html=True)
+                
+                st.warning("Nota: O link de download é temporário e pode expirar após algum tempo.")
             else:
-                st.error(f'Erro ao preparar o vídeo: {error_message}')
+                st.error(f'Erro ao gerar o link: {error_message}')
     else:
         st.warning('Por favor, insira um link de vídeo válido.')
