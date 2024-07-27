@@ -2,29 +2,51 @@ import streamlit as st
 import yt_dlp
 import os
 import tempfile
-import shutil
-import io
+
+# Configuração do logger
+import logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+@st.cache_data
+def get_video_info(url):
+    ydl_opts = {'quiet': True}
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        try:
+            info = ydl.extract_info(url, download=False)
+            return info
+        except Exception as e:
+            logger.error(f"Erro ao obter informações do vídeo: {str(e)}")
+            return None
 
 def download_youtube_video(url, max_height=1080):
-    with tempfile.TemporaryDirectory() as temp_dir:
-        ydl_opts = {
-            'format': f'bestvideo[ext=mp4][height<={max_height}]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-            'outtmpl': os.path.join(temp_dir, '%(title)s.%(ext)s'),
-        }
-        
-        try:
+    try:
+        info = get_video_info(url)
+        if not info:
+            return False, None, "", "Não foi possível obter informações do vídeo."
+
+        # Verifica o tamanho do vídeo
+        file_size = info.get('filesize')
+        if file_size and file_size > 200 * 1024 * 1024:  # 200 MB limit
+            return False, None, "", "O vídeo é muito grande para download direto (limite de 200 MB)."
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as temp_file:
+            ydl_opts = {
+                'format': f'bestvideo[ext=mp4][height<={max_height}]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+                'outtmpl': temp_file.name,
+            }
+            
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=True)
-                filename = ydl.prepare_filename(info)
-                if os.path.exists(filename):
-                    # Lê o arquivo em memória
-                    with open(filename, "rb") as file:
-                        file_data = file.read()
-                    return True, file_data, os.path.basename(filename), ""
-                else:
-                    return False, None, "", f"Arquivo não encontrado: {filename}"
-        except Exception as e:
-            return False, None, "", str(e)
+                ydl.download([url])
+            
+            temp_file.seek(0)
+            file_data = temp_file.read()
+            file_name = f"{info['title']}.mp4"
+            
+            return True, file_data, file_name, ""
+    except Exception as e:
+        logger.error(f"Erro durante o download: {str(e)}")
+        return False, None, "", f"Erro durante o download: {str(e)}"
 
 st.title('YouTube Video Downloader')
 
@@ -41,11 +63,12 @@ if st.button('Preparar Download'):
                 try:
                     st.download_button(
                         label="Baixar Vídeo",
-                        data=io.BytesIO(file_data),
+                        data=file_data,
                         file_name=file_name,
                         mime="video/mp4"
                     )
                 except Exception as e:
+                    logger.error(f"Erro ao preparar o botão de download: {str(e)}")
                     st.error(f"Erro ao preparar o download: {str(e)}")
             else:
                 st.error(f'Erro ao preparar o vídeo: {error_message}')
