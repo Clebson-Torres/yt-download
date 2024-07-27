@@ -30,7 +30,7 @@ def download_youtube_video(url, max_height=1080):
         except Exception as e:
             return False, "", str(e)
 
-st.title('YouTube Video Downloader')
+st.title('Clebin YouTube Video Downloader')
 
 url = st.text_input('Insira o link do vídeo do YouTube:')
 max_resolution = st.selectbox('Selecione a resolução máxima:', [1080, 720, 480, 360])
