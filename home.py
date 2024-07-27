@@ -4,6 +4,11 @@ import os
 import tempfile
 import shutil
 
+st.set_page_config(
+    page_title="yt-download Clebin",
+    page_icon= "./icon.png"
+    )
+
 def download_youtube_video(url, max_height=1080):
     with tempfile.TemporaryDirectory() as temp_dir:
         ydl_opts = {
